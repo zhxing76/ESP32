@@ -49,16 +49,28 @@ void connect_wifi() {  // 連線到Wi-Fi基地台
       }
       Serial.println("Wi-Fi已連線");
     }
-void connectMQTT() {  // 連線到MQTT經紀人
-    Serial.println("Attempting MQTT connection...");
-    if (client.connect(clientID.c_str(), mqttUser, mqttPassword)) {  // clientID, 帳號, 密碼
-      Serial.println("connected");
-    } else {
-      Serial.print("failed, rc=: ");
-      Serial.println(client.state()); //輸出目狀態
-      delay(5000);
+//上傳至MQTT
+void send_to_mqtt(void *pvParameters) {
+  while (1) {
+    while (!client.connected()) {
+      Serial.print("Attempting MQTT connection...");
+      if (client.connect(clientID.c_str(), mqttUser, mqttPassword)) {
+        Serial.println("connected");
+      } else {
+        Serial.print("failed, rc=");
+        Serial.print(client.state()); 
+        Serial.println(" try again in 5 seconds");
+        vTaskDelay(5000);
+      }
     }
+    // 若數據有效才送出
+    if (!isnan(temperature) && !isnan(humidity)) {
+    client.publish(publishTopic_temp, String(temperature).c_str());
+    client.publish(publishTopic_humidity, String(humidity).c_str());   
+    }
+    vTaskDelay(1000);
   }
+}
 void readDT22() {
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
@@ -69,7 +81,7 @@ void sendMessage(String Outgoing, byte Destination) {
   LoRa.write(LocalAddress);       //--> add sender address
   LoRa.write(Outgoing.length());  //--> add payload length
   LoRa.print(Outgoing);           //--> add payload
-  LoRa.endPacket();               //--> finish packet and send it
+  LoRa.endPacket();               //--> finish packet and send it 
 }
 void onReceive(int packetSize) {
   if (packetSize == 0) return;  //--> if there's no packet, return
@@ -79,6 +91,7 @@ void onReceive(int packetSize) {
   byte sender = LoRa.read();          //--> sender address
   byte incomingLength = LoRa.read();  //--> incoming msg length
   //---------------------------------------- 
+
   // Clears Incoming variable data.
   Incoming = "";
 
@@ -116,6 +129,7 @@ void setup() {
   connect_wifi();      // 執行 Wi-Fi 連線
   dht.begin(); //DHT22初始化
   client.setServer(mqttServer, mqttPort);  // 設定 MQTT 經紀人
+  xTaskCreatePinnedToCore(send_to_mqtt, "send_to_mqtt", 10000, NULL, 1, NULL, 1);
   //---------------------------------------- Settings and start Lora Ra-02.
   LoRa.setPins(nss, rst, lora_pin);
 
@@ -129,17 +143,9 @@ void setup() {
 }
 
 void loop() {
-  // if (!client.connected()) {  // 如果未和MQTT經紀人連線
-  //   connectMQTT();            // 執行連線
-  // }
-  // client.loop();  // 一直檢查 • 以便接收訂閱的訊息
-  // readDT22();
-  // // 若數據有效才送出
-  // if (!isnan(humidity) && !isnan(humidity)) { // 改
-  //   client.publish(publishTopic_temp, String(temperature).c_str());
-  //   client.publish(publishTopic_humidity, String(humidity).c_str());   
-  // }
-  // delay(3000);  // 延時3秒後 • 再重複一次新的溫度
+  client.loop();  // 一直檢查 • 以便接收訂閱的訊息
+  readDT22(); //測溫溼度
+  delay(3000);  // 延時3秒後 • 再重複一次新的溫度
 
   unsigned long currentMillis_SendMSG = millis();
   
