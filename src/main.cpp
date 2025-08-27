@@ -1,4 +1,4 @@
-#include <Arduino.h>
+﻿#include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "DHT.h"
@@ -11,8 +11,8 @@
 #define rst 14
 #define lora_pin 2
 //----------------------------------------
-const char* ssid = "AndroidAP473E";       // 無線網路基地台的SSID
-const char* password = "ZIYU_0111";       // 無線網路基地台的密碼
+const char* ssid = "O.O";       // 無線網路基地台的SSID
+const char* password = "oooooooo";       // 無線網路基地台的密碼
 
 // MQTT部分 • 函式區引用及參數設定
 const char *mqttServer = "test.mosquitto.org";  // MQTT網誌
@@ -26,11 +26,10 @@ WiFiClient espClient;  // 建立WiFiClient物件
 PubSubClient client(espClient);  // 建立WiFiClient的物件作為其參數 •
 
 String Incoming = ""; //LoRa incoming
-String Message = "";  //LoRa message
 byte LocalAddress = 0x01;               //--> address of this device (Master Address).
 byte Destination_ESP32_Slave_1 = 0x02;  //--> destination to send to Slave 1 (ESP32).
 byte Destination_ESP32_Slave_2 = 0x03;  //--> destination to send to Slave 2 (ESP32).
-byte Slv = 0;                       // Variable declaration to count slaves.
+byte Slv = 1;                       // Variable declaration to count slaves.
 // Variable declaration for Millis/Timer.
 unsigned long previousMillis_SendMSG = 0;
 const long interval_SendMSG = 1000;
@@ -53,7 +52,7 @@ void connect_wifi() {  // 連線到Wi-Fi基地台
 void send_to_mqtt(void *pvParameters) {
   while (1) {
     while (!client.connected()) {
-      Serial.print("Attempting MQTT connection...");
+      Serial.println("Attempting MQTT connection...");
       if (client.connect(clientID.c_str(), mqttUser, mqttPassword)) {
         Serial.println("connected");
       } else {
@@ -83,7 +82,7 @@ void sendMessage(String Outgoing, byte Destination) {
   LoRa.print(Outgoing);           //--> add payload
   LoRa.endPacket();               //--> finish packet and send it 
 }
-void onReceive(int packetSize) {
+/*void onReceive(int packetSize) {
   if (packetSize == 0) return;  //--> if there's no packet, return
 
   //---------------------------------------- read packet header bytes:
@@ -123,9 +122,9 @@ void onReceive(int packetSize) {
   //Serial.println("RSSI: " + String(LoRa.packetRssi()));
   //Serial.println("Snr: " + String(LoRa.packetSnr()));
   //---------------------------------------- 
-}
+}*/
 void setup() {
-  Serial.begin(115200);  // 啟動序列埠
+  Serial.begin(9600);  // 啟動序列埠
   connect_wifi();      // 執行 Wi-Fi 連線
   dht.begin(); //DHT22初始化
   client.setServer(mqttServer, mqttPort);  // 設定 MQTT 經紀人
@@ -151,33 +150,16 @@ void loop() {
   
   if (currentMillis_SendMSG - previousMillis_SendMSG >= interval_SendMSG) {
     previousMillis_SendMSG = currentMillis_SendMSG;
-
-    Slv++;
-    if (Slv > 2) Slv = 1;
-
-    Message = "SDS" + String(Slv);
-
     //::::::::::::::::: Condition for sending message / command data to Slave 1 (ESP32 Slave 1).
-    if (Slv == 1) {
       Serial.println();
-      Serial.print("Send message to ESP32 Slave " + String(Slv));
-      Serial.println(" : " + Message);
-      sendMessage(Message, Destination_ESP32_Slave_1);
-    }
-    //:::::::::::::::::
-
-    //::::::::::::::::: Condition for sending message / command data to Slave 2 (UNO Slave 2).
-    if (Slv == 2) {
-      Serial.println();
-      Serial.print("Send message to ESP32 Slave " + String(Slv));
-      Serial.println(" : " + Message);
-      sendMessage(Message, Destination_ESP32_Slave_2);
-    }
-    //:::::::::::::::::
+      Serial.println("Temperature :" + String(temperature));
+      sendMessage(String(temperature), Destination_ESP32_Slave_1);
+      Serial.println("Humidity :" + String(humidity));
+      sendMessage(String(humidity), Destination_ESP32_Slave_1);
   }
   //----------------------------------------
 
   //---------------------------------------- parse for a packet, and call onReceive with the result:
-  onReceive(LoRa.parsePacket());
+  ////onReceive(LoRa.parsePacket());
   //----------------------------------------
 }
