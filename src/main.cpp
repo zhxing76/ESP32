@@ -2,10 +2,10 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "DHT.h"
+#include "Adafruit_CCS811.h"
 #include <SPI.h>
 #include <LoRa.h>
 #define DHTPIN A13
-#define DHTTYPE DHT11z
 //---------------------------------------- LoRa Pin / GPIO configuration.
 #define nss 5
 #define rst 14
@@ -32,9 +32,8 @@ byte Destination_ESP32_Slave_2 = 0x03;  //--> destination to send to Slave 2 (ES
 byte Slv = 1;                       // Variable declaration to count slaves.
 // Variable declaration for Millis/Timer.
 unsigned long previousMillis_SendMSG = 0;
-const long interval_SendMSG = 1000;
 
-DHT dht(A13 , DHT22);
+DHT dht(DHTPIN , DHT22);
 float temperature, humidity;  // 溫度值,濕度值
 
 
@@ -49,8 +48,8 @@ void connect_wifi() {  // 連線到Wi-Fi基地台
       Serial.println("Wi-Fi已連線");
     }
 //上傳至MQTT
-void send_to_mqtt(void *pvParameters) {
-  while (1) {
+void connected_mqtt() {
+  
     while (!client.connected()) {
       Serial.println("Attempting MQTT connection...");
       if (client.connect(clientID.c_str(), mqttUser, mqttPassword)) {
@@ -59,7 +58,7 @@ void send_to_mqtt(void *pvParameters) {
         Serial.print("failed, rc=");
         Serial.print(client.state()); 
         Serial.println(" try again in 5 seconds");
-        vTaskDelay(5000);
+        delay(5000);
       }
     }
     // 若數據有效才送出
@@ -67,8 +66,7 @@ void send_to_mqtt(void *pvParameters) {
     client.publish(publishTopic_temp, String(temperature).c_str());
     client.publish(publishTopic_humidity, String(humidity).c_str());   
     }
-    vTaskDelay(1000);
-  }
+    delay(10000);
 }
 void readDT22() {
   temperature = dht.readTemperature();
@@ -81,6 +79,23 @@ void sendMessage(String Outgoing, byte Destination) {
   LoRa.write(Outgoing.length());  //--> add payload length
   LoRa.print(Outgoing);           //--> add payload
   LoRa.endPacket();               //--> finish packet and send it 
+}
+void Lora_send(){
+  unsigned long currentMillis_SendMSG = millis();
+  if (currentMillis_SendMSG - previousMillis_SendMSG >= 10000) {
+    previousMillis_SendMSG = currentMillis_SendMSG;
+    //::::::::::::::::: Condition for sending message / command data to Slave 1 (ESP32 Slave 1).
+      Serial.println();
+      Serial.println("Temperature :" + String(temperature));
+      sendMessage(String(temperature), Destination_ESP32_Slave_1);
+      Serial.println("Humidity :" + String(humidity));
+      sendMessage(String(humidity), Destination_ESP32_Slave_1);
+  }
+  //----------------------------------------
+
+  //---------------------------------------- parse for a packet, and call onReceive with the result:
+  ////onReceive(LoRa.parsePacket());
+  //----------------------------------------
 }
 /*void onReceive(int packetSize) {
   if (packetSize == 0) return;  //--> if there's no packet, return
@@ -128,7 +143,7 @@ void setup() {
   connect_wifi();      // 執行 Wi-Fi 連線
   dht.begin(); //DHT22初始化
   client.setServer(mqttServer, mqttPort);  // 設定 MQTT 經紀人
-  xTaskCreatePinnedToCore(send_to_mqtt, "send_to_mqtt", 10000, NULL, 1, NULL, 1);
+  connected_mqtt();
   //---------------------------------------- Settings and start Lora Ra-02.
   LoRa.setPins(nss, rst, lora_pin);
 
@@ -142,24 +157,7 @@ void setup() {
 }
 
 void loop() {
-  client.loop();  // 一直檢查 • 以便接收訂閱的訊息
   readDT22(); //測溫溼度
-  delay(3000);  // 延時3秒後 • 再重複一次新的溫度
-
-  unsigned long currentMillis_SendMSG = millis();
-  
-  if (currentMillis_SendMSG - previousMillis_SendMSG >= interval_SendMSG) {
-    previousMillis_SendMSG = currentMillis_SendMSG;
-    //::::::::::::::::: Condition for sending message / command data to Slave 1 (ESP32 Slave 1).
-      Serial.println();
-      Serial.println("Temperature :" + String(temperature));
-      sendMessage(String(temperature), Destination_ESP32_Slave_1);
-      Serial.println("Humidity :" + String(humidity));
-      sendMessage(String(humidity), Destination_ESP32_Slave_1);
-  }
-  //----------------------------------------
-
-  //---------------------------------------- parse for a packet, and call onReceive with the result:
-  ////onReceive(LoRa.parsePacket());
-  //----------------------------------------
+  connected_mqtt();
+  Lora_send();
 }
