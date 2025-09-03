@@ -11,9 +11,8 @@
 #define rst 14
 #define lora_pin 2
 //----------------------------------------
-const char* ssid = "O.O";       // 無線網路基地台的SSID
-const char* password = "oooooooo";       // 無線網路基地台的密碼
-
+const char* ssid = "B2-7";       // 無線網路基地台的SSID
+const char* password = "00000000";       // 無線網路基地台的密碼
 // MQTT部分 • 函式區引用及參數設定
 const char *mqttServer = "test.mosquitto.org";  // MQTT網誌
 const int mqttPort = 1883;                      // 預設伺機埠號
@@ -21,11 +20,12 @@ const char *mqttUser = "";                      // 登入帳號
 const char *mqttPassword = "";                  // 登入密碼
 const char *publishTopic_temp = "/laizhizhi076/temperature";     // 需要的主題名稱
 const char *publishTopic_humidity = "/laizhizhi076/humidity";
+const char *publishTopic_CO2 = "/laizhizhi076/CO2_level";
 String clientID = "HOLLE_I_just_want_pass";  // 建立的client ID
 WiFiClient espClient;  // 建立WiFiClient物件
 PubSubClient client(espClient);  // 建立WiFiClient的物件作為其參數 •
 
-String Incoming = ""; //LoRa incoming
+String Incoming = "";                   //LoRa incoming
 byte LocalAddress = 0x01;               //--> address of this device (Master Address).
 byte Destination_ESP32_Slave_1 = 0x02;  //--> destination to send to Slave 1 (ESP32).
 byte Destination_ESP32_Slave_2 = 0x03;  //--> destination to send to Slave 2 (ESP32).
@@ -35,6 +35,8 @@ unsigned long previousMillis_SendMSG = 0;
 
 DHT dht(DHTPIN , DHT22);
 float temperature, humidity;  // 溫度值,濕度值
+Adafruit_CCS811 CO2;          //CO2 SENSOR物件
+int dioxide;                //CO2的數值
 
 
 void connect_wifi() {  // 連線到Wi-Fi基地台
@@ -62,16 +64,18 @@ void connected_mqtt() {
       }
     }
     // 若數據有效才送出
-    if (!isnan(temperature) && !isnan(humidity)) {
+    if (!isnan(temperature) && !isnan(humidity) && !isnan(dioxide)) {
     client.publish(publishTopic_temp, String(temperature).c_str());
     client.publish(publishTopic_humidity, String(humidity).c_str());   
+    client.publish(publishTopic_CO2, String(dioxide).c_str()); 
     }
     delay(10000);
 }
 void readDT22() {
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
-}
+  dioxide = CO2.geteCO2();
+} 
 void sendMessage(String Outgoing, byte Destination) {
   LoRa.beginPacket();             //--> start packet
   LoRa.write(Destination);        //--> add destination address
@@ -90,12 +94,23 @@ void Lora_send(){
       sendMessage(String(temperature), Destination_ESP32_Slave_1);
       Serial.println("Humidity :" + String(humidity));
       sendMessage(String(humidity), Destination_ESP32_Slave_1);
+      if(CO2.available()){
+      if(!CO2.readData()){
+        Serial.println("CO2_level :" + String(dioxide));
+        sendMessage(String(dioxide), Destination_ESP32_Slave_1);
+        }
+      }
   }
   //----------------------------------------
 
   //---------------------------------------- parse for a packet, and call onReceive with the result:
   ////onReceive(LoRa.parsePacket());
   //----------------------------------------
+}
+bool compare_rssi(){
+  int wifi_rssi = WiFi.RSSI();
+  int lora_rssi = LoRa.packetRssi();
+  return (wifi_rssi >= lora_rssi) ? 0 : 1;
 }
 /*void onReceive(int packetSize) {
   if (packetSize == 0) return;  //--> if there's no packet, return
@@ -139,9 +154,10 @@ void Lora_send(){
   //---------------------------------------- 
 }*/
 void setup() {
-  Serial.begin(9600);  // 啟動序列埠
-  connect_wifi();      // 執行 Wi-Fi 連線
-  dht.begin(); //DHT22初始化
+  Serial.begin(9600);   // 啟動序列埠
+  connect_wifi();       // 執行 Wi-Fi 連線
+  dht.begin();          //DHT22初始化
+  CO2.begin(); //啟用CCS811
   client.setServer(mqttServer, mqttPort);  // 設定 MQTT 經紀人
   connected_mqtt();
   //---------------------------------------- Settings and start Lora Ra-02.
