@@ -27,10 +27,7 @@ PubSubClient client(espClient);  // 建立WiFiClient的物件作為其參數 •
 
 String Incoming = "";                   //LoRa incoming
 byte LocalAddress = 0x01;               //--> address of this device (Master Address).
-byte Destination_ESP32_Slave_1 = 0x02;  //--> destination to send to Slave 1 (ESP32).
-byte Destination_ESP32_Slave_2 = 0x03;  //--> destination to send to Slave 2 (ESP32).
-byte Slv = 1;                       // Variable declaration to count slaves.
-// Variable declaration for Millis/Timer.
+byte Destination_ESP32_Slave_1 = 0x02;  //--> destination to send to Slave 1 (ESP32).// Variable declaration for Millis/Timer.
 unsigned long previousMillis_SendMSG = 0;
 
 DHT dht(DHTPIN , DHT22);
@@ -49,9 +46,7 @@ void connect_wifi() {  // 連線到Wi-Fi基地台
       }
       Serial.println("Wi-Fi已連線");
     }
-//上傳至MQTT
 void connected_mqtt() {
-  
     while (!client.connected()) {
       Serial.println("Attempting MQTT connection...");
       if (client.connect(clientID.c_str(), mqttUser, mqttPassword)) {
@@ -62,16 +57,32 @@ void connected_mqtt() {
         Serial.println(" try again in 5 seconds");
         delay(5000);
       }
-    }
-    // 若數據有效才送出
-    if (!isnan(temperature) && !isnan(humidity) && !isnan(dioxide)) {
-    client.publish(publishTopic_temp, String(temperature).c_str());
-    client.publish(publishTopic_humidity, String(humidity).c_str());   
-    client.publish(publishTopic_CO2, String(dioxide).c_str()); 
-    }
-    delay(10000);
+    }    
 }
-void readDT22() {
+void publish_mqtt() {
+  while (!client.connected()) {
+    connected_mqtt();
+  }
+  // 若數據有效才送出
+  if (!isnan(temperature) && !isnan(humidity) && !isnan(dioxide)) {
+  client.publish(publishTopic_temp, String(temperature).c_str());
+  client.publish(publishTopic_humidity, String(humidity).c_str());   
+  client.publish(publishTopic_CO2, String(dioxide).c_str()); 
+  Serial.println("Data sent to MQTT");
+  }
+  delay(10000);
+}
+void set_lora() {
+  LoRa.setPins(nss, rst, lora_pin);
+
+  Serial.println("Start LoRa init...");
+  if (!LoRa.begin(433E6)) {             // initialize ratio at 915 or 433 MHz
+    Serial.println("LoRa init failed. Check your connections.");
+    while (true);                       // if failed, do nothing
+  }
+  Serial.println("LoRa init succeeded.");
+}
+void readData() {
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
   dioxide = CO2.geteCO2();
@@ -85,26 +96,21 @@ void sendMessage(String Outgoing, byte Destination) {
   LoRa.endPacket();               //--> finish packet and send it 
 }
 void Lora_send(){
+  String merge_to_CSV = String(temperature) + "," + String(humidity) + "," + String(dioxide);
   unsigned long currentMillis_SendMSG = millis();
   if (currentMillis_SendMSG - previousMillis_SendMSG >= 10000) {
     previousMillis_SendMSG = currentMillis_SendMSG;
     //::::::::::::::::: Condition for sending message / command data to Slave 1 (ESP32 Slave 1).
       Serial.println();
       Serial.println("Temperature :" + String(temperature));
-      sendMessage(String(temperature), Destination_ESP32_Slave_1);
       Serial.println("Humidity :" + String(humidity));
-      sendMessage(String(humidity), Destination_ESP32_Slave_1);
       if(CO2.available()){
       if(!CO2.readData()){
         Serial.println("CO2_level :" + String(dioxide));
-        sendMessage(String(dioxide), Destination_ESP32_Slave_1);
+        sendMessage(merge_to_CSV, Destination_ESP32_Slave_1);
         }
       }
   }
-  //----------------------------------------
-
-  //---------------------------------------- parse for a packet, and call onReceive with the result:
-  ////onReceive(LoRa.parsePacket());
   //----------------------------------------
 }
 bool compare_rssi(){
@@ -160,20 +166,18 @@ void setup() {
   CO2.begin(); //啟用CCS811
   client.setServer(mqttServer, mqttPort);  // 設定 MQTT 經紀人
   connected_mqtt();
-  //---------------------------------------- Settings and start Lora Ra-02.
-  LoRa.setPins(nss, rst, lora_pin);
-
-  Serial.println("Start LoRa init...");
-  if (!LoRa.begin(433E6)) {             // initialize ratio at 915 or 433 MHz
-    Serial.println("LoRa init failed. Check your connections.");
-    while (true);                       // if failed, do nothing
-  }
-  Serial.println("LoRa init succeeded.");
-  //---------------------------------------- 
+  // set_lora();
 }
 
 void loop() {
-  readDT22(); //測溫溼度
-  connected_mqtt();
-  Lora_send();
+  readData(); //測溫溼度
+  // Serial.println("Temp: " + String(temperature) + " °C");
+  // Serial.println("Humidity: " + String(humidity) + " %");
+  // if(CO2.available()){
+  //   if(!CO2.readData()){
+  //     Serial.println("CO2: " + String(dioxide) + " ppm");
+  //   }
+  // }
+  publish_mqtt();
+  // Lora_send();
 }
