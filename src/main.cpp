@@ -66,8 +66,12 @@ void publish_mqtt() {
   // 若數據有效才送出
   if (!isnan(temperature) && !isnan(humidity) && !isnan(dioxide)) {
   client.publish(publishTopic_temp, String(temperature).c_str());
-  client.publish(publishTopic_humidity, String(humidity).c_str());   
-  client.publish(publishTopic_CO2, String(dioxide).c_str()); 
+  client.publish(publishTopic_humidity, String(humidity).c_str());
+    if(CO2.available()){
+    if(!CO2.readData()){
+      client.publish(publishTopic_CO2, String(dioxide).c_str()); 
+    }
+  }
   Serial.println("Data sent to MQTT");
   }
   delay(10000);
