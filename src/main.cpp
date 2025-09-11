@@ -31,8 +31,9 @@ DHT dht(DHTPIN , DHT22);
 float temperature, humidity;  // 溫度值,濕度值
 Adafruit_CCS811 CO2;          //CO2 SENSOR物件
 int dioxide;                  //CO2的數值
+
 int mode = 0;                 //上傳模式
-int last_mode = -1;            //上次的模式
+int last_mode = -1;           //上次的模式
 unsigned long previousMillis_MQTT = 0;
 unsigned long previousMillis_LoRa = 0;
 const unsigned long interval = 2000; // 2 秒
@@ -93,38 +94,13 @@ void set_lora() {       // LoRa初始化
 }
 void Lora_send(){       // LoRa發送數據
   String merge_to_CSV = String(temperature) + "," + String(humidity) + "," + String(dioxide);
-  unsigned long currentMillis_SendMSG = millis();
-  if (currentMillis_SendMSG - previousMillis_SendMSG >= 10000) {
-    previousMillis_SendMSG = currentMillis_SendMSG;
-
-      // Serial.println();
-      // Serial.println("Temperature :" + String(temperature));
-      // Serial.println("Humidity :" + String(humidity));
-      // if(CO2.available()){
-      //   if(!CO2.readData()){
-      //     Serial.println("CO2_level :" + String(dioxide));
-      //   }
-      // }
-        LoRa.beginPacket();             //--> start packet
-        LoRa.print(merge_to_CSV);       //--> add payload
-        LoRa.endPacket();               //--> finish packet and send it
-        Serial.println("LoRa sent!");
-  }
+  LoRa.beginPacket();             //--> start packet
+  LoRa.print(merge_to_CSV);       //--> add payload
+  LoRa.endPacket();               //--> finish packet and send it
+  Serial.println("LoRa sent!");
 }
-void Lora_receive(){    // LoRa接收數據
-  int packetSize = LoRa.parsePacket();
-  if (packetSize) {
-    String incoming = "";
-    while (LoRa.available()) {
-      incoming += (char)LoRa.read();
-    }
-    Serial.println("Received: " + incoming);
-  }
-}
-bool compare_rssi(){
-  int wifi_rssi = WiFi.RSSI();
-  int lora_rssi = LoRa.packetRssi();
-  return (wifi_rssi >= lora_rssi) ? 0 : 1;
+void check_data(){      // 檢查數據是否有效
+  
 }
 void select_upload(void *pvParameters) {
   while(1){
@@ -134,48 +110,6 @@ void select_upload(void *pvParameters) {
       
   }
 }
-
-/*void onReceive(int packetSize) {
-  if (packetSize == 0) return;  //--> if there's no packet, return
-
-  //---------------------------------------- read packet header bytes:
-  int recipient = LoRa.read();        //--> recipient address
-  byte sender = LoRa.read();          //--> sender address
-  byte incomingLength = LoRa.read();  //--> incoming msg length
-  //----------------------------------------
-
-  // Clears Incoming variable data.
-  Incoming = "";
-
-  //---------------------------------------- Get all incoming data.
-  while (LoRa.available()) {
-    Incoming += (char)LoRa.read();
-  }
-  //----------------------------------------
-
-  //---------------------------------------- Check length for error.
-  if (incomingLength != Incoming.length()) {
-    Serial.println("error: message length does not match length");
-    return; //--> skip rest of function
-  }
-  //----------------------------------------
-
-  //---------------------------------------- Checks whether the incoming data or message for this device.
-  if (recipient != LocalAddress) {
-    Serial.println("This message is not for me.");
-    return; //--> skip rest of function
-  }
-  //----------------------------------------
-
-  //---------------------------------------- if message is for this device, or broadcast, print details:
-  Serial.println();
-  Serial.println("Received from: 0x" + String(sender, HEX));
-  Serial.println("Message length: " + String(incomingLength));
-  Serial.println("Message: " + Incoming);
-  //Serial.println("RSSI: " + String(LoRa.packetRssi()));
-  //Serial.println("Snr: " + String(LoRa.packetSnr()));
-  //----------------------------------------
-}*/
 void setup() {
   Serial.begin(9600);   // 啟動序列埠
   connect_wifi();       // 執行 Wi-Fi 連線
@@ -191,7 +125,7 @@ void setup() {
 void loop() {
   readData(); //測溫溼度
   if (mode != last_mode) {  // 只有 mode 改變時才印
-    Serial.println("模式切換為：" + String(mode) + (mode==0?" (WiFi)":" (LoRa)"));
+    Serial.println("模式切換為：" + String(mode) + (mode==0 ? " (WiFi)":" (LoRa)"));
     last_mode = mode;
   }
   unsigned long currentMillis = millis();
