@@ -17,15 +17,10 @@ const char *mqttServer = "test.mosquitto.org";  // MQTT網誌
 const int mqttPort = 1883;                      // 預設伺機埠號
 const char *mqttUser = "";                      // 登入帳號
 const char *mqttPassword = "";                  // 登入密碼
-const char *publishTopic_temp = "/laizhizhi076/temperature";     // 需要的主題名稱
-const char *publishTopic_humidity = "/laizhizhi076/humidity";
-const char *publishTopic_CO2 = "/laizhizhi076/CO2_level";
+const char *publishTopic_temp = "/laizhizhi076/CSV_data";     // 需要的主題名稱
 String clientID = "HOLLE_I_just_want_pass";  // 建立的client ID
 WiFiClient espClient;  // 建立WiFiClient物件
 PubSubClient client(espClient);  // 建立WiFiClient的物件作為其參數 •
-
-String Incoming = "";                   //LoRa incoming
-unsigned long previousMillis_SendMSG = 0;
 
 DHT dht(DHTPIN , DHT22);
 float temperature, humidity;  // 溫度值,濕度值
@@ -37,7 +32,6 @@ int last_mode = -1;           //上次的模式
 unsigned long previousMillis_MQTT = 0;
 unsigned long previousMillis_LoRa = 0;
 const unsigned long interval = 2000; // 2 秒
-//TaskHandle_t task_handle_1;
 void readData() {       // 讀取溫濕度、二氧化碳濃度數據
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
@@ -53,6 +47,15 @@ void connect_wifi() {   // 連線到Wi-Fi基地台
       }
       Serial.println("Wi-Fi已連線");
     }
+String merge_to_CSV(){  // 合併數據為CSV格式
+  //maybe要加上溫溼度是否有效
+    if(CO2.available() && !CO2.readData()){  // 確保 CO2 數值有效
+    return String(temperature) + "," + String(humidity) + "," + String(dioxide);
+  } else {
+    Serial.println("CO2 data not ready, skipping LoRa send.");
+    return String(temperature) + "," + String(humidity) + ",N/A"; // CO2 數值無效時標記為 N/A
+  }
+}
 void connected_mqtt() { // 連線到MQTT經紀人
     while (!client.connected()) {
       Serial.println("Attempting MQTT connection...");
@@ -71,16 +74,8 @@ void publish_mqtt() {   // 發佈數據到MQTT經紀人
     connected_mqtt();
   }
   // 若數據有效才送出
-  if (!isnan(temperature) && !isnan(humidity) && !isnan(dioxide)) {
-  client.publish(publishTopic_temp, String(temperature).c_str());
-  client.publish(publishTopic_humidity, String(humidity).c_str());
-    if(CO2.available()){
-    if(!CO2.readData()){
-      client.publish(publishTopic_CO2, String(dioxide).c_str());
-    }
-  }
+  client.publish(publishTopic_temp, merge_to_CSV().c_str());
   Serial.println("Data sent to MQTT");
-  }
 }
 void set_lora() {       // LoRa初始化
   LoRa.setPins(nss, rst, lora_pin);
@@ -93,23 +88,21 @@ void set_lora() {       // LoRa初始化
   Serial.println("LoRa init succeeded.");
 }
 void Lora_send(){       // LoRa發送數據
-  String merge_to_CSV = String(temperature) + "," + String(humidity) + "," + String(dioxide);
-  LoRa.beginPacket();             //--> start packet
-  LoRa.print(merge_to_CSV);       //--> add payload
-  LoRa.endPacket();               //--> finish packet and send it
-  Serial.println("LoRa sent!");
+    LoRa.beginPacket();             
+    LoRa.print(merge_to_CSV());  // 發送合併後的CSV數據    
+    LoRa.endPacket();               
+    Serial.println("LoRa sent!");
 }
 void check_data(){      // 檢查數據是否有效
   
 }
 void select_upload(void *pvParameters) {
   while(1){
-    if (Serial.available()) {
+    if (Serial.available()) 
       mode = Serial.parseInt();
-    }
-      
   }
 }
+
 void setup() {
   Serial.begin(9600);   // 啟動序列埠
   connect_wifi();       // 執行 Wi-Fi 連線
@@ -124,7 +117,7 @@ void setup() {
 
 void loop() {
   readData(); //測溫溼度
-  if (mode != last_mode) {  // 只有 mode 改變時才印
+  if (mode != last_mode) {
     Serial.println("模式切換為：" + String(mode) + (mode==0 ? " (WiFi)":" (LoRa)"));
     last_mode = mode;
   }
