@@ -11,34 +11,34 @@
 #define rst 14
 #define lora_pin 2
 
-namespace config {
+namespace config {                                // WiFi and MQTT configuration
   const char* ssid = "bone";                      // 無線網路基地台的SSID
-  const char* password = "09006721180";              // 無線網路基地台的密碼
+  const char* password = "09006721180";           // 無線網路基地台的密碼
   // MQTT部分 • 函式區引用及參數設定
   const char *mqttServer = "test.mosquitto.org";  // MQTT網誌
   const int mqttPort = 1883;                      // 預設伺機埠號
   const char *mqttUser = "";                      // 登入帳號
   const char *mqttPassword = "";                  // 登入密碼
   const char *publishTopic_data = "/laizhizhi076/CSV_data";     // 需要的主題名稱
-  String clientID = "HOLLE_I_just_want_pass";  // 建立的client ID
-  WiFiClient espClient;  // 建立WiFiClient物件
-  PubSubClient client(espClient);  // 建立WiFiClient的物件作為其參數 •
+  String clientID = "HOLLE_I_just_want_pass";     // 建立的client ID
+  WiFiClient espClient;                           // 建立WiFiClient物件
+  PubSubClient client(espClient);                 // 建立WiFiClient的物件作為其參數 •
 }
 DHT dht(dht_pin , DHT22);
 SensirionI2cScd4x scd41_sensor;
-struct sensor_data{
+struct sensor_data{                               // Structure to hold sensor data
   int16_t temperature;
   int16_t humidity;
   int16_t dioxide;
   uint8_t payload[6];
 };
-int mode = 0;                 //上傳模式
-int last_mode = -1;           //上次的模式
+int mode = 0;
+int last_mode = -1;
 unsigned long previousMillis_MQTT = 0;
 unsigned long previousMillis_LoRa = 0;
 const unsigned long interval = 6000;  // 6秒間隔，配合SCD41的5秒更新週期
 
-void readData(sensor_data &data) {             // Read temperature, humidity, and CO2 data from SCD41
+void readData(sensor_data &data) {              // Read temperature, humidity, and CO2 data from SCD41
   uint16_t co2 = 0;
   float temp_scd = 0.0;
   float hum_scd = 0.0;
@@ -113,7 +113,7 @@ void packPayload(sensor_data &data){            // Pack data into payload format
     data.payload[4] = data.dioxide >> 8;
     data.payload[5] = data.dioxide & 0xFF;
 }
-void publishMQTT(sensor_data &data) {   // Publish data to MQTT broker
+void publishMQTT(sensor_data &data) {           // Publish data to MQTT broker
   while (!config::client.connected()) {
     connectMQTT();
   }
@@ -124,15 +124,12 @@ void publishMQTT(sensor_data &data) {   // Publish data to MQTT broker
   Serial.print(data.humidity / 10.0); Serial.print("%, ");
   Serial.print(data.dioxide); Serial.println("ppm\n");
 }
-void sendLoRa(sensor_data &data){       // Send data via LoRa
+void sendLoRa(sensor_data &data){               // Send data via LoRa
   packPayload(data);  
   LoRa.beginPacket();             
   LoRa.write(data.payload, 6);
   LoRa.endPacket();               
   Serial.println("Data sent via LoRa");
-}
-void checkData(){                       // Validate sensor data
-  // To be implemented: data validation logic
 }
 void selectUploadMode(void *pvParameters) {
   while(1){
